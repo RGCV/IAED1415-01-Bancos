@@ -1,0 +1,35 @@
+a ICBC 1 1
+a HSBC_Holdings 1 2
+a China_Const_Bank_Corporation 1 3
+a BNP_Paribas 1 4
+a Mitsubishi_UFJ_Fin_Group 1 5
+a JPMorgan_Chase_&_Co 1 6
+a Agricultural_Bank_of_China 1 7
+a Bank_of_China 1 8
+a Crédit_Agricole_Group 1 9
+a Barclays_PLC 1 10
+e 1 2 10
+e 1 3 10
+e 1 4 10
+e 1 5 10
+e 1 6 10
+e 4 9 2
+e 4 9 2
+e 1 3 10
+e 1 8 5
+e 1 3 10
+e 1 4 10
+p 4 1 8
+e 4 1 2
+l 0
+l 1
+l 2
+k 1
+k 2
+k 3
+K
+K
+K
+l 1
+l 2
+x
