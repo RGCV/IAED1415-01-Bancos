@@ -1,5 +1,5 @@
 # Rede de Bancos
-##$ 1º Projecto de IAED - 14'15
+### 1º Projecto de IAED - 14'15
 
 ---
 
