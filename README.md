@@ -8,9 +8,11 @@
 A recente crise financeira demonstrou a necessidade de compreendermos a forma 
 como os sistemas financeiros estão interligados. Uma das formas de o fazer é 
 mapear o sistema financeiro numa rede, onde cada nó (ou vértice) representa um 
-banco e uma ligação (orientada) entre dois nós representa um empréstimo. Este 
-tipo de representação permite analisar a robustez de uma rede de interacções 
-financeira face, por exemplo, a um colapso de um dos seus intervenientes.
+banco e uma ligação (orientada) entre dois nós representa um empréstimo.
+
+Este tipo de representação permite analisar a robustez de uma rede de
+interacções financeira face, por exemplo, a um colapso de um dos seus
+intervenientes.
 
 Neste projecto pretendemos desenvolver um programa em `C` que registe e 
 manipule a informação referente ao aparecimento e desaparecimento de ligações 
