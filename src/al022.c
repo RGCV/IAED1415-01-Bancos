@@ -1,376 +1,360 @@
-/*
- *****************************************************************************
-*o***************************************************************************o*
-***-------------------------------------------------------------------------***
-**'             1o. projecto de IAED | 2o. semestre - 2014/2015             '**
-**'                 TERMINAL DE GESTAO DE UMA REDE DE BANCOS                '**
-**'    Grupo: 81045-Rui Ventura; 81338-Pedro Cerejo; 81670-Joao Oliveira    '**
-***-------------------------------------------------------------------------***
-*o***************************************************************************o*
- *****************************************************************************
-*/
+/*******************************************************************************
+**----------------------------------------------------------------------------**
+*'                1st IAED project | 2nd semester - 2014/2015                 '*
+*'                       BANK NETWORK MANAGEMENT TERMINAL                     '*
+*'     Group: 81045-Rui Ventura; 81338-Pedro Cerejo; 81670-Joao Oliveira      '*
+**----------------------------------------------------------------------------**
+*******************************************************************************/
 
-/* -- CABECALHOS -- */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-/* -- CONSTANTES -- */
-#define BANCO_BOM 1 /* Representacao numerica de um banco classificado */
-#define BANCO_MAU 0 /* Representacao numerica de um banco desclassificado */
-#define MAXREGS 1000 /* Numero maximo possivel de registos na rede bancaria */
-#define MAXNOME 41 /* Comprimento maximo do nome de um banco (40 chrs + 1 '\0') */
+/** Bank rating. */
+enum bank_rating {
+  /** Represents a unqualified ("bad") bank. */
+  UNQUALIFIED = 0,
+  /** Represents a qualified ("good") bank. */
+  QUALIFIED
+};
+typedef enum bank_rating bank_rating_t;
 
-/* -- ESTRUTURAS -- */
-typedef struct banco {
-    int referencia; /* Referencia identificativa do banco (ID, chave,..) */
-    char nome[MAXNOME]; /* Nome familiar ao utilizador associado a referencia */
-    short int classificacao; /* Classificacao do banco (1 = bom, 0 = mau) */
-    int inP, outP; /* Numero de parceiros com credito / divida */
-    int outV, outVM; /* Valor emprestado, total e a bancos desclassificados */
-    int inV, inVM; /* Valor amortizado, total e a bancos desclassificados */
-} Banco;
+bank_rating_t rating_from_int(int i) {
+  return i == 0 ? UNQUALIFIED : QUALIFIED;
+}
 
-/* -- PROTOTIPOS -- */
-int bancosClassificados();
-int procuraReferencia(int referencia);
+/** Maximum number of registries in the bank network. */
+#define MAX_BANKS 1000
 
-void adicionaBanco();
-void classificaBanco();
-void desclassificaBanco();
-void desclassificaPior();
-void listagem();
-void emprestimo();
-void amortiza();
+/** Bank name maximum length (40 chars + 1 '\0'). */
+#define MAX_NAME_LEN 41
 
-/* -- GLOBAIS -- */
-Banco rede[MAXREGS]; /* O vector de bancos registados na rede */
-int num_bancos; /* Numero total de bancos */
-int matriz[MAXREGS][MAXREGS]; /* Matriz de adjacencia (armazena as transacoes) */
+/** A Bank. */
+struct bank {
+  /** Bank reference identifier. */
+  int id;
+  /** Bank's name. */
+  char name[MAX_NAME_LEN];
+  /** Bank's rating. */
+  bank_rating_t rating;
+  /** Number of partners with credit. */
+  int inP;
+  /** Number of partners with debt. */
+  int outP;
+  /** Total amount loaned. */
+  int outV;
+  /** Amount loaned to unqualified banks. */
+  int outVM;
+  /** Total amortized amount. */
+  int inV;
+  /** Amount amortized from unqualified banks. */
+  int inVM;
+};
+typedef struct bank bank_t;
 
-/* -- MAIN -- */
+int find_bank(int id);
+int qualified_banks();
 
-/*
-    - Params: ---
-    - Funcao: Responsavel.
-    - Devolve: (int) Sucesso / Falhanco
-*/
+void add_bank();
+void loan();
+void disqualify_worst();
+void disqualify_bank();
+void qualify_bank();
+void listing();
+void amortize();
+
+/** Vector of registered banks. */
+bank_t g_banks[MAX_BANKS];
+/** Total number of banks. */
+int g_banks_size;
+/** Transaction adjacency transactions. */
+int transactions[MAX_BANKS][MAX_BANKS];
+
 int main() {
-    int comando;
-    
-    while (1) {
-        switch (comando = getchar()) {
-            case 'a':
-                adicionaBanco();
-                break;
-            case 'e':
-                emprestimo();
-                break;
-            case 'K':
-                desclassificaPior();
-                break;
-            case 'k':
-                desclassificaBanco();
-                break;
-            case 'r':
-                classificaBanco();
-                break;
-            case 'l':
-                listagem();
-                break;
-            case 'p':
-                amortiza();
-                break;
-            case 'x':
-                printf("%d %d\n", num_bancos, bancosClassificados());
-                return EXIT_SUCCESS;
-            default:
-                printf("[ERRO] Comando nao reconhecido (%c)\n", comando);
-                break;
-        }
-        
-        getchar();
+  int command;
+
+  while (1) {
+    switch (command = getchar()) {
+      case 'a': add_bank();         break;
+      case 'e': loan();             break;
+      case 'K': disqualify_worst(); break;
+      case 'k': disqualify_bank();  break;
+      case 'r': qualify_bank();     break;
+      case 'l': listing();          break;
+      case 'p': amortize();         break;
+      case 'x':
+      case EOF:
+        printf("%d %d\n", g_banks_size, qualified_banks());
+        return EXIT_SUCCESS;
+      default:
+        fprintf(stderr, "Error: unrecognized command '%c'\n", command);
     }
-    
-    return EXIT_FAILURE;
+
+    while((command = getchar()) != '\n' && command != EOF && command != 0);
+  }
+
+  return EXIT_FAILURE;
 }
 
-/* -- FUNCOES -- */
-
-/*
-    - Params: ---
-    - Funcao: Percorrer todos os bancos registados na rede bancaria e calcular
-    o numero de bancos classificados.
-    - Devolve: (int) Numero de bancos classificados
-*/
-int bancosClassificados() {
-    int i, classificados = 0;
-    for (i = 0; i < num_bancos; i++)
-        if (rede[i].classificacao == BANCO_BOM) classificados++;
-    return classificados;
+int qualified_banks() {
+  int i = 0, qualified = 0;
+  while (i < g_banks_size) {
+    if (g_banks[i++].rating == QUALIFIED) ++qualified;
+  }
+  return qualified;
 }
 
-/*
-    - Params: (int) referencia
-    - Funcao: Percorrer todos os bancos registados na rede bancaria ate encon-
-    trar o banco com a referencia indicada.
-    - Devolve: (int) Indice do banco com a referencia indicada.
-*/
-int procuraReferencia(int referencia) {
-    int i;
-    for (i = 0; i < num_bancos; i++)
-        if (rede[i].referencia == referencia)
-            return i;
-    return -1;
+int find_bank(int id) {
+  int i;
+  for (i = 0; i < g_banks_size; ++i) {
+    if (g_banks[i].id == id) return i;
+  }
+  return -1;
 }
 
-/*
-    - Params: ---
-    - Funcao: Adicionar um banco a rede de bancos, verificando previamente se
-    e possivel regista-lo, validando a capacidade da rede, comparando ainda
-    a referencia e o nome com os bancos registados (evitar duplicados).
-    - Devolve: ---
-*/
-void adicionaBanco() {
-    char nome[MAXNOME];
-    short int classificacao;
-    int i, referencia;
-    
-    if (num_bancos < MAXREGS) {
-        scanf("%s%hd%d", nome, &classificacao, &referencia);
-        for (i = 0; i < num_bancos; i++) {
-            if (strcmp(rede[i].nome, nome) == 0) {
-                printf("[ERRO] Banco com o mesmo nome encontrado.\n");
-                break;
-            } else if (rede[i].referencia == referencia) {
-                printf("[ERRO] Banco com a mesma referencia encontrado.\n");
-                break;
+void add_bank() {
+  int i, id;
+  short rating;
+  char name[MAX_NAME_LEN];
+
+  if (g_banks_size == MAX_BANKS) {
+    fprintf(stderr, "Error: couldn't add bank. Number of registries maxed.\n");
+    return;
+  }
+
+  if (scanf("%s%hd%d", name, &rating, &id) != 3) {
+    perror("scanf");
+    return;
+  }
+
+  for (i = 0; i < g_banks_size; ++i) {
+    if (g_banks[i].id == id) {
+      fprintf(stderr, "Error: bank with id '%d' already exists.\n", id);
+      break;
+    }
+    if (!strncmp(g_banks[i].name, name, MAX_NAME_LEN)) {
+      fprintf(stderr, "Error: bank '%s' already exists.\n", g_banks[i].name);
+      break;
+    }
+  }
+
+  if (i == g_banks_size) {
+    g_banks[g_banks_size].id = id;
+    g_banks[g_banks_size].rating = rating_from_int(rating);
+    strncpy(g_banks[g_banks_size++].name, name, MAX_NAME_LEN);
+  }
+}
+
+void qualify_bank() {
+  int i, id;
+
+  if (scanf("%d", &id) != 1) {
+    perror("scanf");
+    return;
+  }
+
+  if ((i = find_bank(id)) == -1) {
+    fprintf(stderr, "Error: no bank with id '%d' exists.\n", id);
+    return;
+  }
+
+  if (g_banks[i].rating != QUALIFIED) {
+    int j;
+    for (j = 0; j < MAX_BANKS; j++) {
+      g_banks[j].inVM  -= transactions[i][j];
+      g_banks[j].outVM -= transactions[j][i];
+    }
+    g_banks[i].rating = QUALIFIED;
+  }
+}
+
+void disqualify_bank() {
+  int i, id;
+
+  if (scanf("%d", &id) != 1) {
+    perror("scanf");
+    return;
+  }
+
+  if ((i = find_bank(id)) == -1) {
+    fprintf(stderr, "Error: bank with id '%d' not found.\n", id);
+    return;
+  }
+
+  if (g_banks[i].rating != UNQUALIFIED) {
+    int j;
+    for (j = 0; j < MAX_BANKS; j++){
+      g_banks[j].inVM  += transactions[i][j];
+      g_banks[j].outVM += transactions[j][i];
+    }
+    g_banks[i].rating = UNQUALIFIED;
+  }
+}
+
+void disqualify_worst() {
+  int i, wv, wi = -1;
+
+  for (i = wv = 0; i < g_banks_size; ++i) {
+    if (g_banks[i].rating == QUALIFIED) {
+      int v = g_banks[i].outVM;
+      if (v >= wv) wv = g_banks[wi = i].outVM;
+    }
+  }
+
+  if (wv > 0) {
+    int j;
+    g_banks[wi].rating = UNQUALIFIED;
+
+    for (j = 0; j < g_banks_size; j++){
+      g_banks[j].inVM  += transactions[wi][j];
+      g_banks[j].outVM += transactions[j][wi];
+    }
+
+    printf("*%d %s %d %d %d %d %d %d %d\n",
+      g_banks[wi].id, g_banks[wi].name, (int)g_banks[wi].rating,
+      g_banks[wi].inP, g_banks[wi].outP, g_banks[wi].outV, g_banks[wi].outVM,
+      g_banks[wi].inV, g_banks[wi].inVM);
+  }
+
+  printf("%d %d\n", g_banks_size, qualified_banks());
+}
+
+void listing() {
+  short mode;
+
+  if (scanf("%hd", &mode) != 1) {
+    perror("scanf");
+    return;
+  }
+
+  switch (mode) {
+    case 0:
+    case 1: {
+        int i;
+        for (i = 0; i < g_banks_size ; i++) {
+          bank_t bank = g_banks[i];
+          printf("%d %s %d", bank.id, bank.name, (int)bank.rating);
+          if (mode) {
+            printf(" %d %d %d %d %d %d",
+              bank.inP, bank.outP, bank.outV, bank.outVM, bank.inV, bank.inVM);
+          }
+          printf("\n");
+        }
+      }
+      break;
+    case 2: {
+        int i, g_banks_hist[MAX_BANKS] = {0};
+
+        for (i = 0; i < g_banks_size; i++) {
+          int j, partners = 0;
+          for (j = 0; j < g_banks_size; j++) {
+            if (i != j && (transactions[i][j] > 0 || transactions[j][i] > 0)) {
+              ++partners;
             }
+          }
+          ++g_banks_hist[partners];
         }
-        
-        if (i == num_bancos) {
-            strcpy(rede[num_bancos].nome, nome);
-            rede[num_bancos].classificacao = classificacao;
-            rede[num_bancos++].referencia = referencia;
+
+        for(i = 0; i < g_banks_size ; i++) {
+          if (g_banks_hist[i] != 0) printf("%d %d\n", i, g_banks_hist[i]);
         }
-    } else
-        printf("[ERRO] Numero maximo de registos atingido.\n");
+      }
+      break;
+    default:
+      fprintf(stderr, "Error: unknown listing mode.\n");
+  }
 }
 
-/*
-    - Params: ---
-    - Funcao: Classificar um determinado banco como um banco bom, actualizando,
-    se for caso disso, os valores de transacoes 'malignos' entre os seus par-
-    ceiros.
-    - Devolve: ---
-*/
-void classificaBanco() {
-    int referencia, i, j;
-    
-    scanf("%d", &referencia);
-    i = procuraReferencia(referencia);
-    if (i > -1) {
-        if (rede[i].classificacao != BANCO_BOM) {
-            rede[i].classificacao = BANCO_BOM;
-            for (j = 0; j < MAXREGS; j++){
-                if (matriz[i][j] != 0)
-                    rede[j].inVM -= matriz[i][j];
-                if (matriz[j][i] != 0)
-                    rede[j].outVM -= matriz[j][i];
-        
-            }    
-        }
-    }
-    else 
-       printf("[ERRO] Nao existe nenhum banco com tal referencia!\n");
+void loan() {
+  int i = -1, j = i, k;
+  int id_src, id_dst, amount;
+
+  if (scanf("%d%d%d", &id_src, &id_dst, &amount) != 3) {
+    perror("scanf");
+    return;
+  }
+
+  if (amount < 0) {
+    fprintf(stderr, "Error: invalid amount (%d)\n", amount);
+    return;
+  }
+
+  if (amount == 0) return;
+
+  for (k = 0; k < g_banks_size && (i < 0 || j < 0); k++) {
+    if (g_banks[k].id == id_src) i = k;
+    if (g_banks[k].id == id_dst) j = k;
+  }
+
+  if (i == j) {
+    fprintf(stderr, "Error: the id's are the same.\n");
+    return;
+  }
+
+  if (i == -1 || j == -1) {
+    fprintf(stderr, "Error: invalid id(s).\n");
+    return;
+  }
+
+  if (transactions[i][j] == 0) {
+    ++g_banks[i].outP;
+    ++g_banks[j].inP;
+  }
+  transactions[i][j] += amount;
+
+  g_banks[i].outV += amount;
+  if (g_banks[j].rating == UNQUALIFIED) g_banks[i].outVM += amount;
+
+  g_banks[j].inV += amount;
+  if (g_banks[i].rating == UNQUALIFIED) g_banks[j].inVM += amount;
 }
 
-/*
-    - Params: ---
-    - Funcao: Classificar um determinado banco como um banco mau, actualizando,
-    se for caso disso, os valores de transacoes 'malignos' entre os seus par-
-    ceiros.
-    - Devolve: (int) Numero de bancos classificados
-*/
-void desclassificaBanco() {
-    int referencia, i, j;
-    
-    scanf("%d", &referencia);
-    i = procuraReferencia(referencia);
-    if (i > -1) {
-        if (rede[i].classificacao != BANCO_MAU) {
-            rede[i].classificacao = BANCO_MAU;
-            for (j = 0; j < MAXREGS; j++){
-                if (matriz[i][j] != 0)
-                    rede[j].inVM += matriz[i][j];
-                if (matriz[j][i] != 0)
-                    rede[j].outVM += matriz[j][i];
-        
-            }    
-        }
-    }
-    else 
-       printf("[ERRO] Nao existe nenhum banco com tal referencia!\n");
-}
+void amortize() {
+  int i = -1, j = i, k;
+  int id_src, id_dst, amount;
 
-/*
-    - Params: ---
-    - Funcao: Classificar o 'pior' banco bom como mau, ou seja, o banco classi-
-    ficado com a maior divida para com bancos maus ou desclassificados.
-    - Devolve: ---
-*/
-void desclassificaPior() {
-    int i, j, pior = -1;
-    
-    for (i = 0; i < num_bancos; i++) {
-        if (rede[i].classificacao == BANCO_BOM &&
-            rede[i].outVM >= rede[pior].outVM)
-            pior = i;
-    }
-    
-    if (pior > -1 && rede[pior].outVM > 0) {
-        rede[pior].classificacao = BANCO_MAU;
-        
-        for (j = 0; j < num_bancos; j++){
-            if (matriz[pior][j] != 0)
-                rede[j].inVM += matriz[pior][j];
-            if (matriz[j][pior] != 0)
-                rede[j].outVM += matriz[j][pior];
-    
-        }
-        
-        printf("*%d %s %hd %d %d %d %d %d %d\n",
-                   rede[pior].referencia, rede[pior].nome,
-                   rede[pior].classificacao,
-                   rede[pior].inP, rede[pior].outP,
-                   rede[pior].outV, rede[pior].outVM,
-                   rede[pior].inV, rede[pior].inVM);
-    }
-    printf("%d %d\n", num_bancos, bancosClassificados());
-}
+  if (scanf("%d%d%d", &id_src, &id_dst, &amount) != 3) {
+    perror("scanf");
+    return;
+  }
 
-/*
-    - Params: ---
-    - Funcao: Emitir uma listagem de tres maneiras distintas. Uma listagem
-    simples (nome, referencia e classificacao), uma mais detalhada (com a adicao
-    de numero de parceiros com credito ou divida e valores de emprestimo e
-    amortizacao totais e para com bancos maus) e uma terceira que revela um
-    histograma (b n, numero de bancos b com n parceiros)
-    - Devolve: ---
-*/
-void listagem() {
-    short int modo;
-    int i, j, parceiros, nBancos[MAXREGS] = {0};
-    
-    scanf("%hd", &modo);
-    switch (modo) {
-        case 0:
-        case 1:
-            for (i = 0; i < num_bancos ; i++) {
-                printf("%d %s %hd",
-                       rede[i].referencia, rede[i].nome, rede[i].classificacao);
-                printf(modo ? " %d %d %d %d %d %d\n" : "\n",
-                       rede[i].inP, rede[i].outP, 
-                       rede[i].outV, rede[i].outVM,
-                       rede[i].inV, rede[i].inVM);
-            }
-            break;
-        case 2:
-            for (i = 0; i < num_bancos; i++) {
-                parceiros = 0;
-                for (j = 0; j < num_bancos; j++) {
-                    if (i != j && (matriz[i][j] > 0 || matriz[j][i] > 0))
-                        parceiros++;
-                }
-                nBancos[parceiros]++;
-            }
-            
-            for(i = 0; i < num_bancos ; i++)
-                if (nBancos[i] != 0)
-                    printf("%d %d\n", i, nBancos[i]);
-            break;
-        default:
-            printf("[ERRO] Nao especificou o modo de listagem.\n"); 
-            break;
-    }
-}
+  if (amount < 0) {
+    fprintf(stderr, "Error: invalid amount (%d)\n", amount);
+    return;
+  }
 
-/*
-    - Params: ---
-    - Funcao: Realizar um emprestimo entre os bancos A e B, validando previamen-
-    te o montante inserido.
-    - Devolve: ---
-*/
-void emprestimo() {
-    int refOrig, refDest, valor, i = -1, j = -1, k;
+  if (amount == 0) return;
 
-    scanf("%d%d%d", &refOrig, &refDest, &valor);
-    if (valor >= 0) {
-        if (valor != 0) {
-            for (k = 0; k < num_bancos && (i < 0 || j < 0); k++) {
-                if (rede[k].referencia == refOrig)
-                    i = k;
-                else if (rede[k].referencia == refDest)
-                    j = k;
-            }
-            if (i != j && i > -1 && j > -1) {
-                if (matriz[i][j] == 0) {
-                    rede[i].outP++;
-                    rede[j].inP++;
-                }
-                if (rede[i].classificacao == BANCO_MAU) 
-                    rede[j].inVM += valor;
-                if (rede[j].classificacao == BANCO_MAU)
-                    rede[i].outVM += valor;
-                rede[i].outV += valor;
-                rede[j].inV += valor;
-                matriz[i][j] += valor;
-            } else
-                printf("[ERRO] A(s) referencia(s) introduzida(s) %s!\n",
-                       i == j ? "sao iguais" : "esta(o) incorreta(s)");
-        }
-    } else 
-        printf("[ERRO] O montante introduzido nao e permitido!\n");
-}
+  for (k = 0; k < g_banks_size && (i < 0 || j < 0); k++) {
+    if (g_banks[k].id == id_src) j = k;
+    if (g_banks[k].id == id_dst) i = k;
+  }
 
-/*
-    - Params: ---
-    - Funcao: Realizar uma amortizacao entre os bancos A e B, validando previa-
-    mente o montante inserido.
-    - Devolve: ---
-*/
-void amortiza() {
-    int refOrig, refDest, valor, i = -1, j = -1, k;
+  if (i == j) {
+    fprintf(stderr, "Error: the id's are the same.\n");
+    return;
+  }
 
-    scanf("%d%d%d", &refOrig, &refDest, &valor);
-    if (valor >= 0) {
-        if (valor != 0) {
-            for (k = 0; k < num_bancos && (i < 0 || j < 0); k++) {
-                if (rede[k].referencia == refOrig)
-                    j = k;
-                else if (rede[k].referencia == refDest)
-                    i = k;
-            }
-            if (i != j && i > -1 && j > -1) {
-                if (matriz[i][j] >= valor) {
-                    matriz[i][j] -= valor;
-                    if (matriz[i][j] == 0) {
-                        rede[i].outP--;
-                        rede[j].inP--;
-                    }
-                    if (rede[i].classificacao == BANCO_MAU)
-                        rede[j].inVM -= valor;
-                    if (rede[j].classificacao == BANCO_MAU)
-                        rede[i].outVM -= valor;
-                    rede[i].outV -= valor;
-                    rede[j].inV -= valor;
-                } else
-                    printf("[ERRO] Valor a amortizar tem que ser inferior ou " \
-                           "igual ao da divida.\n");
-            } else
-                printf("[ERRO] A(s) referencia(s) introduzida(s) %s!\n",
-                       i == j ? "sao iguais" : "esta(o) incorreta(s)");
-        }
-    } else 
-        printf("[ERRO] O valor introduzido nao e permitido!\n");
+  if (i == -1 || j == -1) {
+    fprintf(stderr, "Error: invalid id(s).\n");
+    return;
+  }
+
+  if (transactions[i][j] < amount) {
+    fprintf(stderr, "Error: amount must be lesser than or equal to that of the "
+                    "debt.\n");
+    return;
+  }
+
+  transactions[i][j] -= amount;
+  if (transactions[i][j] == 0) {
+    g_banks[i].outP--;
+    g_banks[j].inP--;
+  }
+
+  g_banks[i].outV -= amount;
+  if (g_banks[j].rating == UNQUALIFIED) g_banks[i].outVM -= amount;
+
+  g_banks[j].inV -= amount;
+  if (g_banks[i].rating == UNQUALIFIED) g_banks[j].inVM -= amount;
 }
